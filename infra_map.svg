@@ -26,7 +26,7 @@
   </defs>
   <rect class="bg" width="1200" height="860"/>
   <text x="24" y="34" class="t" font-size="20" font-weight="700">5G lab infrastructure map</text>
-  <text x="24" y="54" class="m">Laptop (Linux) &#8594; Docker &#8594; kind cluster "5glab" &#8594; free5GC 5G core + UERANSIM RAN. Captured traffic is analysed with pcapx.</text>
+  <text x="24" y="54" class="m">Laptop (Linux) &#8594; Docker &#8594; kind cluster "corelab" &#8594; free5GC 5G core + UERANSIM RAN. Captured traffic is analysed with pcapx.</text>
 
   <!-- HOST -->
   <rect class="host" x="16" y="70" width="1168" height="770" rx="12"/>
@@ -49,11 +49,11 @@
 
   <!-- KIND: docker containers -->
   <rect class="host" x="32" y="104" width="1136" height="590" rx="10"/>
-  <text x="46" y="126" class="h">kind cluster "5glab" &#8212; Kubernetes v1.31, 2 Docker containers on one bridge network</text>
+  <text x="46" y="126" class="h">kind cluster "corelab" &#8212; Kubernetes v1.31, 2 Docker containers on one bridge network</text>
 
   <!-- control plane -->
   <rect class="node" x="46" y="140" width="220" height="130" rx="8"/>
-  <text x="58" y="160" class="h">5glab-control-plane</text>
+  <text x="58" y="160" class="h">corelab-control-plane</text>
   <text x="58" y="178" class="m">Docker container</text>
   <text x="58" y="196" class="m">kube-apiserver</text>
   <text x="58" y="212" class="m">etcd, scheduler, controller-mgr</text>
@@ -62,11 +62,11 @@
 
   <!-- worker -->
   <rect class="node" x="280" y="140" width="876" height="540" rx="8"/>
-  <text x="292" y="160" class="h">5glab-worker   (runs every 5G pod)</text>
+  <text x="292" y="160" class="h">corelab-worker   (runs every 5G pod)</text>
 
-  <!-- namespace free5gc -->
+  <!-- namespace core -->
   <rect class="ns" x="294" y="172" width="848" height="400" rx="8"/>
-  <text x="306" y="192" class="h">namespace: free5gc</text>
+  <text x="306" y="192" class="h">namespace: core</text>
 
   <!-- RAN column -->
   <rect class="ran" x="310" y="210" width="190" height="72" rx="8"/>
@@ -75,13 +75,13 @@
   <text x="322" y="266" class="m">uesimtun0 tunnel interface</text>
 
   <rect class="ran" x="310" y="330" width="190" height="90" rx="8"/>
-  <text x="322" y="352" class="h">gNB-1 (lab-gnb)</text>
+  <text x="322" y="352" class="h">gNB-1 (ran-gnb)</text>
   <text x="322" y="370" class="m">N2 NGAP (SCTP)</text>
   <text x="322" y="386" class="m">N3 GTP-U (UDP)</text>
   <text x="322" y="402" class="m">link: gnb-service 4997/udp</text>
 
   <rect class="ran" x="310" y="448" width="190" height="90" rx="8"/>
-  <text x="322" y="470" class="h">gNB-2 (tower2-gnb)</text>
+  <text x="322" y="470" class="h">gNB-2 (ran-cell2)</text>
   <text x="322" y="488" class="m">N2 NGAP (SCTP)</text>
   <text x="322" y="504" class="m">N3 GTP-U (UDP)</text>
   <text x="322" y="520" class="m">link: gnb2-service 4997/udp</text>
@@ -124,8 +124,8 @@
   <rect class="db" x="1052" y="448" width="80" height="110" rx="8"/>
   <text x="1058" y="470" class="h">WebUI</text>
   <text x="1058" y="488" class="m">manage subs</text>
-  <text x="1058" y="504" class="m">NodePort</text>
-  <text x="1058" y="520" class="m">:30500</text>
+  <text x="1058" y="504" class="m">ClusterIP</text>
+  <text x="1058" y="520" class="m">:5000</text>
 
   <!-- links -->
   <!-- N2 gNBs -> AMF -->
@@ -165,7 +165,7 @@
   <!-- capture -->
   <path class="cap" d="M280,560 C200,600 200,700 240,712" marker-end="url(#ah)"/>
   <text x="46" y="612" class="m">tcpdump -i any on worker</text>
-  <text x="46" y="628" class="m">(docker exec 5glab-worker)</text>
+  <text x="46" y="628" class="m">(docker exec corelab-worker)</text>
   <text x="46" y="644" class="m">&#8594; docker cp &#8594; pcapng</text>
 
   <!-- legend -->

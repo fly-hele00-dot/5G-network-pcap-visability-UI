@@ -8,14 +8,18 @@ The captures come from a local 5G lab (free5GC + UERANSIM on a kind cluster). Th
 
 ![Infrastructure map](infra_map.png)
 
-Vector version: [`infra_map.svg`](infra_map.svg). The map contains no IP addresses. Every address in this README and
-in the screenshots is a dummy from the documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`,
-`198.18.0.0/15`), not a real one.
+Vector version: [`infra_map.svg`](infra_map.svg).
+
+IP addresses and pod / deployment names in this README are the same as in the 5G lab project
+(`../5g lab/lab/README.md`, section *Addressing & exposure*): cluster `corelab`, namespace `core`, Helm releases
+`core` (pods `core-free5gc-<nf>-*`), `ran` (pods `ran-gnb-*`, `ran-ue-*`) and `ran-cell2` (second gNB).
+The commands below can be copied as they are. The only exception is the screenshots, where the IP addresses are
+replaced by dummy documentation-range addresses (`192.0.2.0/24`).
 
 ## Screenshots
 
 The captures below are a 222 MB, 330k-packet lab trace imported through the UI. IP addresses in the screenshots
-are replaced by dummy documentation-range addresses.
+are replaced by dummy documentation-range addresses (`192.0.2.x`), unlike the rest of this README.
 
 **1. Import.** Press **Import pcap…** (or drop the file on the page). The file is stored, selected in the drop-down,
 and ready to run.
@@ -95,7 +99,7 @@ Names must be plain file names (no sub-folders): the server rejects anything wit
 
 ### 2. Capture fresh traffic from the lab
 
-The lab runs in two Docker containers (`5glab-worker`, `5glab-control-plane`). Every 5G pod is on the worker,
+The lab runs in two Docker containers (`corelab-worker`, `corelab-control-plane`). Every 5G pod is on the worker,
 and the worker has `tcpdump`. Capturing on interface `any` there sees SBI (HTTP/2), N2 (NGAP), N3 (GTP-U),
 N4 (PFCP), MongoDB and the Kubernetes NAT (before/after kube-proxy) in one file.
 
@@ -103,11 +107,11 @@ N4 (PFCP), MongoDB and the Kubernetes NAT (before/after kube-proxy) in one file.
 cd /home/hele/Documents/Claude/whireshark
 
 # 60 second capture streamed straight to a file on the host
-docker exec 5glab-worker timeout -s INT 60 tcpdump -i any -s 0 -U -w - > lab_$(date +%Y%m%d_%H%M).pcap
+docker exec corelab-worker timeout -s INT 60 tcpdump -i any -s 0 -U -w - > lab_$(date +%Y%m%d_%H%M).pcap
 ```
 
 - While it runs, generate the traffic you want to look at, for example restart the UE so it registers and opens a
-  PDU session: `kubectl -n free5gc rollout restart deploy/ueransim-lab-ue`.
+  PDU session: `kubectl -n core rollout restart deploy/ran-ue`.
 - Stream to stdout (`-w -`) as above instead of writing a file in the node and using `docker cp`.
   The node's `/tmp` is a tmpfs, and `docker cp` cannot read it (`Could not find the file /tmp/...`).
 - Narrow the capture on the wire to keep files small, for example only the 5G control/user-plane protocols:
@@ -121,7 +125,7 @@ Most NF images have no `tcpdump`, so attach a debug container that shares the po
 (standard `kubectl debug` usage, not tried in this lab):
 
 ```bash
-kubectl -n free5gc debug -it deploy/free5gc-lab-free5gc-smf-smf --image=nicolaka/netshoot --target=smf -- \
+kubectl -n core debug -it deploy/core-free5gc-smf-smf --image=nicolaka/netshoot --target=smf -- \
   tcpdump -i any -s 0 -U -w - > smf.pcap
 ```
 
@@ -134,7 +138,7 @@ about 15 s). Later queries on the same file and pre-filter are instant. To keep 
 
 - Fill the **pre-filter** box in the UI (or `--pre` on the CLI) with a native Wireshark display filter.
   It is applied by `tshark` before parsing, so it is much cheaper than the pcapx filter:
-  `ip.addr==192.0.2.22 or sctp or pfcp or gtp`
+  `ip.addr==10.60.0.1 or sctp or pfcp or gtp`
 - Or cut the file down first:
   ```bash
   editcap -A "2026-09-24 10:11:00" -B "2026-09-24 10:12:00" capture.pcapng slice.pcapng   # time window
@@ -198,25 +202,74 @@ The server only binds to `localhost` and has no authentication. Do not expose it
 
 ## The lab
 
-Kubernetes cluster `5glab` (kind, v1.31): `5glab-control-plane` and `5glab-worker`. Namespaces: `free5gc`
-(NRF, AMF, SMF, UPF, AUSF, UDM, UDR, PCF, NSSF, WebUI, MongoDB, 2× gNB, UE), `monitoring` (Prometheus, Grafana, kube-state-metrics).
+Kubernetes cluster `corelab` (kind, v1.31): `corelab-control-plane` and `corelab-worker`. Namespaces: `core`
+(free5GC NFs from release `core`: NRF, AMF, SMF, UPF, AUSF, UDM, UDR, PCF, NSSF, WebUI, MongoDB; RAN from releases
+`ran` (gNB + UE) and `ran-cell2` (second gNB)), `monitoring` (Prometheus, Grafana, kube-state-metrics).
 
 | Interface | Network | Endpoints |
 |---|---|---|
-| SBI (HTTP/2, port 80) | kindnet pod network `192.0.2.0/24`, ClusterIP `198.51.100.0/24` | all NFs |
-| N2 (NGAP, SCTP 38412) | Multus ipvlan `203.0.113.8/29` | AMF `.9`, gNB-1 `.10`, gNB-2 `.11` |
-| N3 (GTP-U, UDP 2152) | Multus ipvlan `203.0.113.16/29` | UPF `.17`, gNB-2 `.18`, gNB-1 `.20` |
-| N4 (PFCP, UDP 8805) | Multus ipvlan `203.0.113.24/29` | UPF `.25`, SMF `.28` |
-| N6 | Multus ipvlan on the kind bridge | UPF `198.18.0.22`, NAT to the internet, UE pool `198.19.0.0/17` |
+| SBI (HTTP/2, port 80) | Pod CIDR `10.212.0.0/16`, Service (ClusterIP) CIDR `10.213.0.0/16` | all NFs |
+| N2 (NGAP, SCTP 38412) | Multus ipvlan `10.47.60.248/29` | AMF `.249`, gNB (`ran`) `.250`, cell2 gNB (`ran-cell2`) `.251` |
+| N3 (GTP-U, UDP 2152) | Multus ipvlan `10.47.60.232/29` | UPF `.233`, cell2 gNB `.234`, gNB `.236` |
+| N4 (PFCP, UDP 8805) | Multus ipvlan `10.47.60.240/29` | UPF `.241`, SMF `.244` |
+| N9 (ULCL only) | Multus ipvlan `10.47.60.224/29` | |
+| N6 | kind node network `corelab-net` `172.29.40.0/24` | UPF `172.29.40.200`, NAT to the internet, UE pool `10.60.0.0/17` (first UE `10.60.0.1`) |
 
-Handy access: WebUI NodePort `30500` (on the worker `198.18.0.2`), Grafana and Prometheus are ClusterIP
-(`kubectl -n monitoring port-forward svc/grafana 3000`).
+Nodes are `.2` / `.3` on `corelab-net`, gateway `.1`.
+
+Handy access: every Service is ClusterIP (no NodePorts). WebUI, Grafana and Prometheus are reached with
+`./scripts/09-open-grafana.sh` from the 5G lab project, which port-forwards to `127.0.0.1` (WebUI `:5000`,
+Grafana `:3000`, Prometheus `:9090`).
 
 ### Health check
 
 ```bash
-kubectl -n free5gc get pods                                                   # all Running, no restarts climbing
-kubectl -n free5gc logs deploy/ueransim-lab-ue | grep -E "Registration|PDU Session|uesimtun"
-kubectl -n free5gc exec deploy/ueransim-lab-ue -- ping -c 3 -I uesimtun0 <any-public-host>
+kubectl -n core get pods                                                   # all Running, no restarts climbing
+kubectl -n core logs deploy/ran-ue | grep -E "Registration|PDU Session|uesimtun"
+kubectl -n core exec deploy/ran-ue -- ping -c 3 -I uesimtun0 <any-public-host>
 ```
 
+## Troubleshooting: SMF and UPF in CrashLoopBackOff after a reboot
+
+Seen on 2026-09-24 (the lab had been rebooted the day before).
+
+**Symptoms**
+
+```text
+SMF: [ERRO][SMF][PFCP] Failed to listen: listen udp 10.47.60.244:8805: bind: cannot assign requested address
+UPF: UPF Cli Run Error: open Gtp5g: open link: listen: listen udp4 10.47.60.233:2152: bind: cannot assign requested address
+```
+
+**Cause.** N2, N3, N4 and N6 are secondary interfaces attached by Multus when a pod sandbox is created.
+After the host reboot the kubelet recreated the sandboxes with only `eth0` (kindnet); the Multus attach did
+not happen. The pods therefore had no `10.47.60.x` address to bind to. Clues: `kubectl exec ... ip addr` shows only
+`eth0`, and the pod annotation `k8s.v1.cni.cncf.io/network-status` still lists old addresses. AMF was affected too
+(no `n2`), it just did not crash.
+
+**Fix.** Recreate the pods so Multus attaches the interfaces, in this order (core first, RAN after the AMF listens):
+
+```bash
+kubectl -n core rollout restart deploy/core-free5gc-upf-upf deploy/core-free5gc-smf-smf deploy/core-free5gc-amf-amf
+kubectl -n core rollout status  deploy/core-free5gc-amf-amf
+# wait until the AMF log says "Listen on 10.47.60.249:38412", then:
+kubectl -n core delete pod -l component=gnb                                # recreated by their deployments, see gotcha below
+kubectl -n core rollout restart deploy/ran-ue
+```
+
+**Gotchas hit while fixing it**
+
+- **Start order.** gNBs started before the AMF listened, got `SCTP could not connect: Connection refused`, and never
+  retried, so the UE saw only barred cells (`Cell selection failure`). Restart the gNBs after the AMF is up.
+- **Static IPs and rolling updates.** The gNB / UPF pods use fixed ipvlan addresses. A rolling update starts the new
+  pod while the old one still holds the IP, and the new one hangs in `Init` with
+  `failed to add IP addr ... address already in use`. Delete the old pod (or use `kubectl rollout undo`), or better set
+  `strategy: type: Recreate` on those deployments (in the Helm values, so the change is not lost on upgrade).
+
+**Verify.** `SMF` logs `Received PFCP Association Setup Accepted Response from UPF[10.47.60.241]`, the gNBs log
+`NG Setup procedure is successful`, and the UE logs `PDU Session establishment is successful` with `uesimtun0` up.
+
+## Notes and limits
+
+- The correlation is heuristic. A "caused by" link in the diagram means a call started while another call to the same server was still open, not a proven causal chain.
+- Only cleartext HTTP/2 (h2c, as in this lab) is decoded. TLS-encrypted SBI needs the keys in Wireshark first.
+- A capture on interface `any` shows some packets twice (before and after kube-proxy NAT). pcapx merges them (rows marked `twin`).
