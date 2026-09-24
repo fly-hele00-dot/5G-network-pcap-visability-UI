@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Packet Flow</title>
+<style>
+:root{--bg:#fff;--fg:#1c2330;--mut:#667085;--line:#e4e8ef;--panel:#f6f8fb;--band:#f9fafc;--acc:#3b5bdb;--accbg:#e8eefc;
+  --get:#3b5bdb;--post:#0b8a66;--put:#c76b00;--del:#d6303a;--ok:#2b8a3e;--warn:#c76b00;--bad:#d6303a;--other:#7048e8;--err:#c92a2a}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#12161d;--fg:#e6eaf0;--mut:#98a2b3;--line:#262d3a;--panel:#191f29;--band:#151a22;--acc:#748ffc;--accbg:#1d2b4a;
+  --get:#74a0ff;--post:#3ddbab;--put:#ffa94d;--del:#ff8087;--ok:#69db7c;--warn:#ffa94d;--bad:#ff8087;--other:#b197fc;--err:#ff8787}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 system-ui,sans-serif;display:flex;flex-direction:column;height:100vh}
+.bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.bar input[type=text],.bar select,.bar input[type=number]{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+#f{width:300px}#seq{width:100px}#max{width:70px}#pre{width:170px}
+button{padding:5px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}button:disabled{opacity:.5;cursor:default}
+.seg{display:inline-flex}.seg button{border-radius:0;margin-left:-1px}.seg button:first-child{border-radius:6px 0 0 6px;margin:0}.seg button:last-child{border-radius:0 6px 6px 0}
+.seg button.on{background:var(--accbg);border-color:var(--acc);position:relative;z-index:1;font-weight:600}
+label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.key{display:inline-flex;align-items:center;gap:5px;color:var(--mut);font-size:12px}.key i{display:inline-block;width:20px;height:0;border-top:3px solid}
+#status{padding:5px 16px;color:var(--mut);border-bottom:1px solid var(--line);min-height:28px}#status.err{color:var(--err)}
+main{flex:1;display:flex;min-height:0}
+#wrap{flex:1;overflow:auto;position:relative}
+#hdr{position:sticky;top:0;z-index:2;background:var(--bg);display:block;border-bottom:1px solid var(--line)}
+#side{width:440px;border-left:1px solid var(--line);padding:14px 16px;overflow:auto;background:var(--panel)}
+#side h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+#side .title{font-size:14px;font-weight:600;word-break:break-all;margin-bottom:2px}
+#side dl{margin:8px 0 0;display:grid;grid-template-columns:auto 1fr;gap:3px 12px}
+#side dt{color:var(--mut)}#side dd{margin:0;word-break:break-all}
+.sec{margin-top:16px}
+.hint{color:var(--mut)}
+.pill{display:inline-block;padding:0 7px;border-radius:9px;font-weight:600;font-size:12px;border:1px solid currentColor}
+.idv,.lnk{display:inline-block;margin:2px 4px 2px 0;padding:1px 8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);cursor:pointer;font-size:12px;color:var(--fg);text-decoration:none}
+.idv:hover,.lnk:hover{border-color:var(--acc)}
+.fr{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;margin:2px 0;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);cursor:pointer;font-size:12px}
+.fr.on{border-color:var(--acc);background:var(--accbg)}.fr b{min-width:52px}.fr .k{color:var(--mut);min-width:96px}
+svg text{fill:var(--fg);font-size:12.5px}svg .mut{fill:var(--mut)}svg .sm{font-size:11.5px}
+svg .halo{paint-order:stroke;stroke:var(--bg);stroke-width:5px;stroke-linejoin:round}
+.lane{stroke:var(--line);stroke-width:1}
+.row{cursor:pointer}.row:hover .hov{opacity:1}.hov{fill:var(--accbg);opacity:0}
+.dim{opacity:.2}
+#layers .tools{display:flex;gap:6px;margin:6px 0}#layers button{padding:2px 8px;font-size:12px}
+#layers details{margin-left:12px}#layers>details{margin-left:0}
+#layers summary{cursor:pointer;padding:1px 0;word-break:break-all}#layers>details>summary{font-weight:600;padding:3px 0}
+#layers .leaf{margin-left:12px;padding:1px 0 1px 4px;word-break:break-all;font-size:12px}
+pre.hex{margin:6px 0 0;padding:8px;background:var(--bg);border:1px solid var(--line);border-radius:6px;overflow:auto;font:11px/1.5 ui-monospace,monospace;white-space:pre}
+table{border-collapse:collapse;width:100%}th{position:sticky;top:0;background:var(--panel);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);z-index:1}
+td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top;font-variant-numeric:tabular-nums}
+tr.tr{cursor:pointer}tr.tr:hover{background:var(--panel)}tr.chain{background:var(--accbg)}tr.sel{outline:2px solid var(--acc);outline-offset:-2px}
+td.wrapc{max-width:480px;word-break:break-all}
+[hidden]{display:none!important}
+@media(max-width:800px){#side{display:none}#f{width:100%}}
+body.drag{outline:3px dashed var(--acc);outline-offset:-6px}
+</style></head><body>
+<div class="bar" id="web">
+  <select id="file" title="pcap file"></select>
+  <input type="text" id="pre" placeholder="wireshark pre-filter (optional)" title="Native Wireshark display filter, e.g. http2 or sctp. Applied while loading; speeds up big files.">
+  <input type="text" id="f" placeholder="filter: imsi=2089300* and proto~=HTTP2" spellcheck="false">
+  <input type="text" id="seq" placeholder="tcp seq">
+  <label><input type="checkbox" id="hop">any hop</label>
+  <label><input type="checkbox" id="follow" checked>follow session</label>
+  <label>max rows <input type="number" id="max" value="120" min="1" max="2000"></label>
+  <button class="primary" id="run">Run</button>
+  <button id="export">Export pcap</button>
+  <button id="import" title="Upload a .pcap / .pcapng / .cap from your computer (or drop it anywhere on this page)">Import pcap…</button>
+  <input type="file" id="pick" accept=".pcap,.pcapng,.cap" hidden>
+</div>
+<div class="bar">
+  <span class="seg"><button id="v-rows" class="on" title="One row per request/response exchange, NAT copies merged">Exchanges</button><button id="v-packets" title="Every packet as captured">Packets</button><button id="v-table" title="Exchanges as a table">Table</button></span>
+  <input type="text" id="q" placeholder="highlight: text in any row" style="width:190px">
+  <span class="key"><i style="border-color:var(--get)"></i>GET</span><span class="key"><i style="border-color:var(--post)"></i>POST</span><span class="key"><i style="border-color:var(--put)"></i>PUT/PATCH</span><span class="key"><i style="border-color:var(--del)"></i>DELETE</span>
+  <span class="key"><i style="border-top-style:dashed;border-color:var(--mut)"></i>response</span>
+</div>
+<div id="status"></div>
+<main><div id="wrap"><svg id="hdr" height="46"></svg><svg id="svg"></svg><div id="tbl" hidden></div></div>
+<aside id="side"></aside></main>
+<script>
+const STATIC = /*DATA*/null;
+let D = { rows: [], packets: [], roles: {} }, view = 'rows', selRow = null, selFrame = null, query = '', ids = null, kids = [], chain = null;
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const NS = 'http://www.w3.org/2000/svg';
+const css = t => getComputedStyle(document.documentElement).getPropertyValue('--' + t).trim();
+const mk = (tag, attrs, parent, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || $('svg')).appendChild(e); if (text !== undefined) e.textContent = text; return e; };
+const clip = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+
+// ---- naming / colours -------------------------------------------------------------------------------------
+const RANK = ['AMF', 'SMF', 'PCF', 'NSSF', 'AUSF', 'UDM', 'UDR', 'UDSF', 'NRF', 'CHF', 'NEF', 'BSF', 'SMSF', 'LMF'];
+const methodColor = m => ({ GET: 'get', POST: 'post', PUT: 'put', PATCH: 'put', DELETE: 'del' }[m] || 'other');
+const statusColor = s => s[0] === '2' ? 'ok' : s[0] === '3' ? 'get' : s[0] === '4' ? 'warn' : 'bad';
+const PROTO = ['#4c6ef5', '#12b886', '#f59f00', '#e64980', '#7950f2', '#15aabf', '#82c91e', '#fd7e14'], protoCol = {};
+const pcolor = p => { p = p.split('/')[0]; return protoCol[p] || (protoCol[p] = PROTO[Object.keys(protoCol).length % PROTO.length]); };
+const roleOf = ip => D.roles[ip] || '';
+const nameOf = ip => roleOf(ip) ? `${roleOf(ip)} (${ip})` : ip;
+// "/nudm-sdm/v2/imsi-208930000000003/sm-data?dnn=x" -> { svc:'nudm-sdm', rest:'‹imsi› › sm-data' }
+function pathParts(path) {
+  const segs = path.split('?')[0].split('/').filter(Boolean), svc = /^n[a-z]+-/.test(segs[0] || '') ? segs.shift() : '';
+  const rest = segs.filter(s => !/^v\d+$/.test(s)).map(s => /^(imsi|msisdn|nai|suci|supi|gpsi)-/i.test(s) ? '‹' + s.split('-')[0] + '›' : /^\d+$/.test(s) ? '‹id›' : s);
+  return { svc, rest: rest.join(' › ') };
+}
+const fmtDur = s => s <= 0 ? '' : s < 1 ? `${(s * 1000).toFixed(s < .01 ? 1 : 0)} ms` : `${s.toFixed(2)} s`;
+
+// ---- data -------------------------------------------------------------------------------------------------
+function setData(d) {
+  D = d; selRow = selFrame = null; chain = null;
+  kids = D.rows.map(() => []); D.rows.forEach(r => { if (r.parent != null) kids[r.parent].push(r.id); });
+  render(); side();
+}
+const items = () => view === 'packets' ? D.packets : D.rows;
+const rowOfItem = it => view === 'packets' ? it.row : it.id;
+function computeChain() {
+  chain = null; if (selRow === null) return;
+  const up = []; for (let p = D.rows[selRow].parent; p != null; p = D.rows[p].parent) up.unshift(p);
+  if (!up.length && !kids[selRow].length) return;
+  const depth = new Map(); up.forEach((r, i) => depth.set(r, i)); depth.set(selRow, up.length);
+  const down = r => kids[r].forEach(k => { depth.set(k, depth.get(r) + 1); down(k); }); down(selRow);
+  chain = { depth, up };
+}
+function textOf(it) {
+  if (view === 'packets') return [it.s, it.d, roleOf(it.s), roleOf(it.d), it.proto, it.info, JSON.stringify(it.ids)].join(' ').toLowerCase();
+  return [roleOf(it.s), roleOf(it.d), it.s, it.d, it.method, it.path, it.status, it.reason, it.note, it.info, JSON.stringify(it.ids)].join(' ').toLowerCase();
+}
+const matches = it => !query || textOf(it).includes(query);
+
+// ---- render -----------------------------------------------------------------------------------------------
+function render() {
+  computeChain();
+  const m = D.total !== undefined
+    ? `${D.matched.toLocaleString()} of ${D.total.toLocaleString()} packets match` + (D.context ? ` (+${D.context.toLocaleString()} from the same exchanges)` : '') + ` → ${D.rows_total.toLocaleString()} exchanges` + (D.shown < D.rows_total ? ` — showing the first ${D.shown} (raise “max rows” or narrow the filter)` : '')
+    : `${D.rows_total} exchanges, ${D.packets.length} packets`;
+  setStatus(m + (chain ? ` · call chain: ${chain.depth.size} exchanges` : ''));
+  ['svg', 'hdr'].forEach(i => $(i).toggleAttribute('hidden', view === 'table')); $('tbl').toggleAttribute('hidden', view !== 'table');
+  view === 'table' ? drawTable() : drawLadder();
+}
+
+const ROWH = () => view === 'packets' ? 40 : 58, Y0 = 8, X0 = 190;
+function drawLadder() {
+  const svg = $('svg'), hdr = $('hdr'); svg.innerHTML = ''; hdr.innerHTML = '';
+  const its = items(), packets = view === 'packets', ROW = ROWH();
+  // lanes: unnamed endpoints first (clients), then network functions in a fixed 5G order
+  const lanes = []; its.forEach(it => [it.s, it.d].forEach(ip => { if (!lanes.includes(ip)) lanes.push(ip); }));
+  const first = Object.fromEntries(lanes.map((ip, i) => [ip, i]));
+  const rank = ip => { const r = RANK.indexOf(roleOf(ip)); return roleOf(ip) ? 100 + (r < 0 ? 50 : r) : 0; };
+  lanes.sort((a, b) => rank(a) - rank(b) || first[a] - first[b]);
+  const avail = Math.max(600, $('wrap').clientWidth), LW = Math.max(130, Math.min(250, Math.floor((avail - X0 - 40) / Math.max(1, lanes.length))));
+  const lx = ip => X0 + lanes.indexOf(ip) * LW + LW / 2;
+  const W = X0 + lanes.length * LW + 20, H = Y0 + its.length * ROW + 24, t0 = its.length ? its[0].t : 0;
+  svg.setAttribute('width', W); svg.setAttribute('height', H); hdr.setAttribute('width', W);
+  lanes.forEach(ip => {
+    const x = lx(ip), r = roleOf(ip);
+    mk('line', { x1: x, x2: x, y1: 0, y2: H, class: 'lane' });
+    mk('text', { x, y: r ? 20 : 27, 'text-anchor': 'middle', style: 'font-weight:700;font-size:14px' }, hdr, r || ip);
+    if (r) mk('text', { x, y: 37, 'text-anchor': 'middle', class: 'mut sm' }, hdr, ip);
+  });
+  mk('text', { x: 12, y: 27, class: 'mut sm' }, hdr, packets ? 'packet · time' : 'first packet · time');
+
+  its.forEach((it, i) => {
+    const top = Y0 + i * ROW, dim = (chain && !chain.depth.has(rowOfItem(it))) || !matches(it);
+    const isSel = packets ? it.f === selFrame : it.id === selRow, inCh = chain && chain.depth.has(rowOfItem(it));
+    const g = mk('g', { class: 'row' + (dim ? ' dim' : ''), 'data-i': i });
+    if (i % 2 === 0) mk('rect', { x: 0, y: top, width: W, height: ROW, fill: css('band') }, g);
+    if (isSel || inCh) mk('rect', { x: 0, y: top, width: W, height: ROW, fill: css('accbg'), opacity: isSel ? 1 : .6 }, g);
+    mk('rect', { x: 0, y: top, width: W, height: ROW, class: 'hov' }, g);
+    if (isSel || inCh) mk('rect', { x: 0, y: top, width: 4, height: ROW, fill: css('acc') }, g);
+    const x1 = lx(it.s), x2 = lx(it.d), mx = (x1 + x2) / 2, back = x2 < x1, same = x1 === x2;
+    mk('text', { x: 12, y: top + (packets ? 17 : 20), class: 'sm', style: 'font-weight:600' }, g, `#${packets ? it.f : it.frames[0].f}`);
+    mk('text', { x: 12, y: top + (packets ? 32 : 36), class: 'mut sm' }, g, `+${(it.t - t0).toFixed(3)}s`);
+    if (packets) {
+      const c = pcolor(it.proto), y = top + ROW - 10;
+      if (!same) { mk('line', { x1, x2, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, g); mk('path', { d: `M${x2},${y} l${back ? 9 : -9},-4.5 v9 z`, fill: c }, g); }
+      const t = mk('text', { x: same ? x1 + 10 : mx, y: y - 6, 'text-anchor': same ? 'start' : 'middle', class: 'halo' }, g);
+      mk('tspan', { style: 'font-weight:700', fill: c }, t, it.proto.split('/').pop() + '  ');
+      mk('tspan', {}, t, clip(it.info.replace(/^(HEADERS|DATA)\[\d+\]:?\s*/, '$1 '), 64));
+      if (it.twin) mk('tspan', { class: 'mut' }, t, '  (NAT copy)');
+      mk('title', {}, g, `#${it.f} ${it.s} → ${it.d}\n${it.info}`);
+      return;
+    }
+    // exchange row: request arrow, dashed response arrow, one label above, status below
+    const isTxn = it.kind === 'txn', c = isTxn ? css(methodColor(it.method)) : pcolor(it.proto), ya = top + 30, yb = top + 40;
+    if (!same) { mk('line', { x1, x2, y1: ya, y2: ya, stroke: c, 'stroke-width': 2.4 }, g); mk('path', { d: `M${x2},${ya} l${back ? 10 : -10},-5 v10 z`, fill: c }, g); }
+    else mk('circle', { cx: x1, cy: ya, r: 4, fill: c }, g);
+    if (isTxn && !same && it.status) {
+      mk('line', { x1: x2, x2: x1, y1: yb, y2: yb, stroke: css('mut'), 'stroke-width': 1.5, 'stroke-dasharray': '5 4' }, g);
+      mk('path', { d: `M${x1},${yb} l${back ? -9 : 9},-4 v8 z`, fill: css('mut') }, g);
+    }
+    const lab = mk('text', { x: same ? x1 + 12 : mx, y: top + 20, 'text-anchor': same ? 'start' : 'middle', class: 'halo' }, g);
+    if (isTxn && it.method) {
+      const pp = pathParts(it.path);
+      mk('tspan', { style: 'font-weight:700', fill: c }, lab, it.method + '  ');
+      if (pp.svc) mk('tspan', { class: 'mut' }, lab, pp.svc + ' › ');
+      mk('tspan', {}, lab, clip(pp.rest || it.path, 58));
+    } else if (isTxn) mk('tspan', { class: 'mut' }, lab, '(request not in selection)');
+    else { mk('tspan', { style: 'font-weight:700', fill: c }, lab, it.proto.split('/').pop() + '  '); mk('tspan', {}, lab, clip(it.info, 60)); }
+    if (isTxn) {
+      const st = mk('text', { x: same ? x1 + 12 : mx, y: top + 54, 'text-anchor': same ? 'start' : 'middle', class: 'halo sm' }, g);
+      if (it.status) mk('tspan', { style: 'font-weight:700', fill: css(statusColor(it.status)) }, st, `${it.status} ${it.reason}`);
+      else mk('tspan', { class: 'mut' }, st, 'no response captured');
+      const meta = [it.note && clip(it.note, 40), fmtDur(it.tend - it.t)].filter(Boolean).join(' · ');
+      if (meta) mk('tspan', { class: 'mut' }, st, '   ' + meta);
+    }
+    mk('title', {}, g, `${it.method} ${it.path}\n${nameOf(it.s)} → ${nameOf(it.d)}\n${it.status} ${it.reason}\n${it.frames.length} packets`);
+  });
+  // call chain: brackets in the left gutter join the selected exchange with what called it and what it triggered
+  if (chain && !packets) {
+    const pos = new Map(its.map((x, i) => [x.id, i])), yc = r => Y0 + pos.get(r) * ROW + ROW / 2, acc = css('acc');
+    for (const [r] of chain.depth) {
+      const p = D.rows[r].parent; if (p == null || !pos.has(p) || !pos.has(r)) continue;
+      const gx = 100 + 14 * Math.min(chain.depth.get(r), 5), yp = yc(p), ycd = yc(r);
+      mk('path', { d: `M${X0 - 6},${yp} H${gx} V${ycd} H${X0 - 12}`, fill: 'none', stroke: acc, 'stroke-width': 2 });
+      mk('path', { d: `M${X0 - 6},${ycd} l-8,-4 v8 z`, fill: acc });
+      mk('circle', { cx: X0 - 6, cy: yp, r: 3.5, fill: acc });
+    }
+  }
+  svg.querySelectorAll('.row').forEach(g => g.onclick = () => pick(+g.dataset.i));
+}
+
+function drawTable() {
+  const t0 = D.rows.length ? D.rows[0].t : 0;
+  $('tbl').innerHTML = '<table><thead><tr><th>#</th><th>+s</th><th>from</th><th>to</th><th>request</th><th>status</th><th>pkts</th><th>ids</th></tr></thead><tbody>' + D.rows.map(r => {
+    const cls = r.id === selRow ? 'sel' : chain && chain.depth.has(r.id) ? 'chain' : '';
+    const req = r.kind === 'txn' ? `<b style="color:${css(methodColor(r.method))}">${esc(r.method)}</b> ${esc(r.path)}` : `${esc(r.proto)} ${esc(r.info)}`;
+    return `<tr class="tr ${cls}" data-i="${r.id}" ${matches(r) ? '' : 'style="opacity:.25"'}><td>${r.frames[0].f}</td><td>${(r.t - t0).toFixed(3)}</td><td>${esc(nameOf(r.s))}</td><td>${esc(nameOf(r.d))}</td><td class="wrapc">${req}</td><td>${r.status ? `<span style="color:${css(statusColor(r.status))};font-weight:600">${r.status} ${esc(r.reason)}</span>` : ''} ${esc(r.note)}</td><td>${r.frames.length}</td><td>${esc(Object.entries(r.ids).map(([k, v]) => k + '=' + v.join(',')).join(' '))}</td></tr>`;
+  }).join('') + '</tbody></table>';
+  $('tbl').querySelectorAll('tr.tr').forEach(tr => tr.onclick = () => selectRow(+tr.dataset.i));
+}
+
+// ---- selection --------------------------------------------------------------------------------------------
+function pick(i) { view === 'packets' ? selectFrame(D.packets[i].f, D.packets[i].row) : selectRow(D.rows[i].id); }
+function selectRow(r, keep) {
+  selRow = selRow === r && !keep ? null : r; selFrame = null;
+  if (selRow !== null) { const fr = D.rows[selRow].frames; selFrame = (fr.find(f => f.k === 'req' && !f.twin) || fr[0]).f; }
+  render(); side();
+}
+function selectFrame(f, r) { selRow = r; selFrame = f; render(); side(); }
+function step(d) {
+  const its = items(); if (!its.length) return;
+  const cur = its.findIndex(it => view === 'packets' ? it.f === selFrame : it.id === selRow);
+  const n = Math.max(0, Math.min(its.length - 1, (cur < 0 ? (d > 0 ? -1 : its.length) : cur) + d));
+  view === 'packets' ? selectFrame(its[n].f, its[n].row) : selectRow(its[n].id, true);
+  const w = $('wrap'), y = Y0 + 46 + n * ROWH();
+  if (y < w.scrollTop + 60 || y > w.scrollTop + w.clientHeight - ROWH()) w.scrollTo({ top: Math.max(0, y - w.clientHeight / 2) });
+}
+document.addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || view === 'table') return;
+  if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); step(1); }
+  if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); step(-1); }
+});
+
+// ---- side panel -------------------------------------------------------------------------------------------
+const rowTitle = r => { if (r.kind !== 'txn' || !r.method) return `${r.proto} ${r.info}`; const p = pathParts(r.path); return `${r.method} ${p.svc ? p.svc + ' › ' : ''}${p.rest || r.path}`; };
+function side() {
+  const s = $('side');
+  if (selRow === null) {
+    s.innerHTML = '<p class="hint">Click an exchange to see its details, who called it, what it triggered and every packet in it. Arrow keys move the selection.</p>' + (ids ? idList() : '');
+    s.querySelectorAll('.idv').forEach(e => e.onclick = () => { $('f').value = `${e.dataset.k}=${e.dataset.v}`; runQuery(); });
+    return;
+  }
+  const r = D.rows[selRow], link = id => `<a class="lnk" href="#" data-r="${id}" title="${esc(rowTitle(D.rows[id]))}">${esc(clip(rowTitle(D.rows[id]), 52))}</a>`;
+  const sc = r.status ? `<span class="pill" style="color:${css(statusColor(r.status))}">${r.status} ${esc(r.reason)}</span>` : '<span class="hint">no response captured</span>';
+  const parent = r.parent != null ? `<div style="margin:3px 0">${link(r.parent)}<br><span class="hint">${esc(roleOf(D.rows[r.parent].d) || D.rows[r.parent].d)} was still handling this call when it made this one</span></div>` : '';
+  const ch = kids[r.id], kindName = { req: 'request', resp: 'response', data: 'body', pkt: 'packet' };
+  const frames = r.frames.map(f => `<button class="fr ${f.f === selFrame ? 'on' : ''}" data-f="${f.f}"><b>#${f.f}</b><span class="k">${kindName[f.k]}${f.twin ? ' · NAT copy' : ''}</span><span>${esc(f.s)} → ${esc(f.d)}</span></button>`).join('');
+  s.innerHTML = `<div class="title">${esc(r.kind === 'txn' && r.method ? `${r.method} ${r.path}` : `${r.proto} ${r.info}`)}</div><div>${sc} <span class="hint">${esc(r.note)}</span></div>
+  <dl><dt>from</dt><dd>${esc(nameOf(r.s))}</dd><dt>to</dt><dd>${esc(nameOf(r.d))}</dd><dt>time</dt><dd>${new Date(r.t * 1000).toISOString().replace('T', ' ').replace('Z', ' UTC')}</dd>${fmtDur(r.tend - r.t) ? `<dt>duration</dt><dd>${fmtDur(r.tend - r.t)}</dd>` : ''}` +
+    Object.entries(r.ids).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v.join(', '))}</dd>`).join('') + `</dl>
+  <div class="sec"><h3>Call chain</h3>${parent || '<span class="hint">Not made while another exchange was open.</span>'}${ch.length ? `<div class="hint" style="margin-top:6px">Triggered ${ch.length} call${ch.length > 1 ? 's' : ''}:</div>` + ch.slice(0, 12).map(link).join('<br>') : ''}</div>
+  <div class="sec"><h3>Packets (${r.frames.length})</h3>${frames}</div><div class="sec" id="layers"></div>`;
+  s.querySelectorAll('a[data-r]').forEach(a => a.onclick = e => { e.preventDefault(); const id = +a.dataset.r; selectRow(id, true); scrollToRow(id); });
+  s.querySelectorAll('button.fr').forEach(b => b.onclick = () => { selFrame = +b.dataset.f; side(); if (view === 'packets') render(); });
+  loadLayers(selFrame);
+}
+function scrollToRow(r) { const i = items().findIndex(it => rowOfItem(it) === r); if (i >= 0) $('wrap').scrollTo({ top: Math.max(0, Y0 + i * ROWH() - 160), behavior: 'smooth' }); }
+
+// full dissection of every layer of one packet, from sharkd (only available when served by server.py)
+const layerCache = {};
+async function loadLayers(frame) {
+  const box = $('layers'); if (!box) return;
+  if (STATIC) { box.innerHTML = '<p class="hint">All packet layers are available in the web UI (python3 server.py).</p>'; return; }
+  const key = $('file').value + '#' + frame;
+  box.innerHTML = `<h3>All layers of #${frame}</h3><p class="hint">Dissecting… (the first click on a file loads it into Wireshark, a few seconds)</p>`;
+  try {
+    const d = layerCache[key] || (layerCache[key] = await api('/api/frame', new URLSearchParams({ file: $('file').value, frame })));
+    if (selFrame !== frame || !$('layers')) return;
+    box.innerHTML = `<h3>All layers of #${frame}</h3><div class="tools"><button id="exp">Expand all</button><button id="col">Collapse all</button></div>` + layerTree(d.tree, 0) +
+      `<details style="margin-top:8px"><summary>Raw bytes (${atob(d.bytes).length})</summary><pre class="hex">${hexdump(d.bytes)}</pre></details>`;
+    $('exp').onclick = () => box.querySelectorAll('details').forEach(x => x.open = true);
+    $('col').onclick = () => box.querySelectorAll('details').forEach(x => x.open = false);
+  } catch (e) { if (selFrame === frame && $('layers')) box.innerHTML = `<h3>All layers</h3><p style="color:var(--err)">${esc(e.message)}</p>`; }
+}
+const layerTree = (nodes, depth) => nodes.map((x, k) => x.n && x.n.length
+  ? `<details ${depth === 0 && k >= 2 ? 'open' : ''}><summary>${esc(x.l)}</summary>${layerTree(x.n, depth + 1)}</details>`
+  : `<div class="leaf">${esc(x.l)}</div>`).join('');
+function hexdump(b64) {
+  const b = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); let out = '';
+  for (let o = 0; o < b.length; o += 16) {
+    const r = b.slice(o, o + 16);
+    out += o.toString(16).padStart(4, '0') + '  ' + [...r].map(x => x.toString(16).padStart(2, '0')).join(' ').padEnd(47) + '  ' + [...r].map(x => x >= 32 && x < 127 ? String.fromCharCode(x) : '.').join('') + '\n';
+  }
+  return esc(out);
+}
+function idList() {
+  const c = ids._counts;
+  return '<div class="sec"><h3>Identities in this trace</h3>' + Object.keys(c).map(k => `<div style="margin-bottom:6px"><span class="hint">${k} (${c[k]})</span><br>` + ids[k].slice(0, 40).map(v => `<span class="idv" data-k="${k}" data-v="${esc(v)}">${esc(v)}</span>`).join('') + (c[k] > 40 ? ' <span class="hint">…</span>' : '') + '</div>').join('') + '</div>';
+}
+
+// ---- wiring -----------------------------------------------------------------------------------------------
+function setStatus(msg, err) { $('status').textContent = msg; $('status').classList.toggle('err', !!err); }
+const params = () => new URLSearchParams({ file: $('file').value, pre: $('pre').value.trim(), f: $('f').value.trim(), seq: $('seq').value.trim(), hop: $('hop').checked ? 1 : 0, follow: $('follow').checked ? 1 : 0, max: $('max').value });
+async function api(path, p) {
+  const r = await fetch(path + '?' + p), j = await r.json().catch(() => ({ error: 'bad response' }));
+  if (!r.ok) throw new Error(j.error || r.statusText); return j;
+}
+async function runQuery() {
+  $('run').disabled = true; setStatus('Loading… the first query on a large pcap parses the whole file (about 15 s for 300k packets).');
+  try {
+    setData(await api('/api/query', params()));
+    if (!ids || ids._file !== $('file').value + $('pre').value) { ids = await api('/api/ids', params()); ids._file = $('file').value + $('pre').value; side(); }
+  } catch (e) { setStatus(e.message, true); } finally { $('run').disabled = false; }
+}
+function setView(v) {
+  view = v; ['rows', 'packets', 'table'].forEach(x => $('v-' + x).classList.toggle('on', x === v));
+  if (v === 'packets' && selRow !== null && !D.packets.some(p => p.f === selFrame)) selFrame = D.rows[selRow].frames[0].f;
+  render();
+}
+['rows', 'packets', 'table'].forEach(v => $('v-' + v).onclick = () => setView(v));
+$('q').oninput = e => { query = e.target.value.toLowerCase(); render(); };
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => view !== 'table' && render(), 150); });
+
+if (STATIC) { $('web').hidden = true; setData(STATIC); }
+else {
+  // fill the file list; `select` is the name to preselect (the file that was just imported)
+  const loadFiles = select => api('/api/files', '').then(files => {
+    if (!files.length) return setStatus('No .pcap / .pcapng files found yet. Press "Import pcap…" or drop a file here.', true);
+    $('file').innerHTML = files.map(f => `<option value="${esc(f.name)}">${esc(f.name)} (${f.mb} MB)</option>`).join('');
+    if (select) $('file').value = select;
+    else setStatus('Pick a file, optionally enter a filter, and press Run. Leave the filter empty to see the start of the trace.');
+  }).catch(e => setStatus(e.message, true));
+  loadFiles();
+  function upload(file) {
+    if (!/\.(pcap|pcapng|cap)$/i.test(file.name)) return setStatus('Only .pcap, .pcapng and .cap files can be imported.', true);
+    const x = new XMLHttpRequest(), mb = n => (n / 1e6).toFixed(n < 1e7 ? 1 : 0);
+    x.open('POST', '/api/upload?name=' + encodeURIComponent(file.name));
+    x.setRequestHeader('X-Requested-With', 'pcapx');
+    $('import').disabled = true; setStatus(`Importing ${file.name}…`);
+    x.upload.onprogress = e => e.lengthComputable && setStatus(`Importing ${file.name}: ${Math.round(e.loaded / e.total * 100)}% (${mb(e.loaded)} of ${mb(e.total)} MB)`);
+    x.onerror = () => { $('import').disabled = false; setStatus('Import failed: connection to the server lost.', true); };
+    x.onload = async () => {
+      $('import').disabled = false;
+      let j = {}; try { j = JSON.parse(x.responseText); } catch (e) { /* not json */ }
+      if (x.status !== 200) return setStatus(j.error || `Import failed (HTTP ${x.status}).`, true);
+      ids = null; await loadFiles(j.name);
+      setStatus(`Imported ${j.name} (${j.mb} MB). Press Run to load it.`);
+    };
+    x.send(file);
+  }
+  $('import').onclick = () => $('pick').click();
+  $('pick').onchange = () => { if ($('pick').files[0]) upload($('pick').files[0]); $('pick').value = ''; };
+  addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drag'); });
+  addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('drag'); });
+  addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('drag'); if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); });
+  $('run').onclick = runQuery; $('f').onkeydown = $('seq').onkeydown = $('pre').onkeydown = e => { if (e.key === 'Enter') runQuery(); };
+  $('file').onchange = () => { ids = null; };
+  $('export').onclick = () => { location = '/api/export?' + params(); };
+  side();
+}
+</script></body></html>
