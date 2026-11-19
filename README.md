@@ -56,7 +56,7 @@ Requirements: Python 3.8+, and `tshark`, `sharkd`, `editcap`, `mergecap` (all sh
 ## Run the app
 
 ```bash
-cd /home/hele/Documents/Claude/whireshark
+
 python3 server.py                     # http://localhost:8000, pcaps from this folder
 python3 server.py --dir ~/captures    # pcaps from another folder
 python3 server.py --port 8080         # another port
@@ -83,9 +83,6 @@ You can also put a file into that folder by hand (below). The UI picks it up on 
 
 ### 1. You already have a capture file (Wireshark, tcpdump, a colleague, a bug report)
 
-```bash
-cp ~/Downloads/incident.pcapng /home/hele/Documents/Claude/whireshark/
-```
 
 Reload the page. The file list is read on page load, so the file shows up without restarting the server.
 Files with other extensions (`.pcap.gz`, `.snoop`, `.dmp`, ...) are ignored. Convert or unpack them first:
@@ -103,8 +100,6 @@ The lab runs in two Docker containers (`corelab-worker`, `corelab-control-plane`
 and the worker has `tcpdump`. Capturing on interface `any` there sees SBI (HTTP/2), N2 (NGAP), N3 (GTP-U),
 N4 (PFCP), MongoDB and the Kubernetes NAT (before/after kube-proxy) in one file.
 
-```bash
-cd /home/hele/Documents/Claude/whireshark
 
 # 60 second capture streamed straight to a file on the host
 docker exec corelab-worker timeout -s INT 60 tcpdump -i any -s 0 -U -w - > lab_$(date +%Y%m%d_%H%M).pcap
